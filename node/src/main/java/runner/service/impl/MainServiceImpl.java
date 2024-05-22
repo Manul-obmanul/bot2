@@ -1,6 +1,7 @@
 package runner.service.impl;
 
 import lombok.extern.log4j.Log4j;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -36,15 +37,15 @@ public class MainServiceImpl implements MainService{
 
     @Override
     public void proccessTextMessage(Update update){
-        var text = update.getMessage().getText();
+        /*var text = update.getMessage().getText();
         var output = "Что-то пошло не так...";
         output = processServiceCommand(update, text);
 
         var chatId = update.getMessage().getChatId();
-        sendAnswer(output, chatId);
+        sendAnswer(output, chatId);*/
     }
 
-    private void sendAnswer(String output, Long chatId) {
+    public void sendAnswer(String output, Long chatId) {
         var sendMessage = new SendMessage();
         sendMessage.setChatId(chatId);
         sendMessage.setText(output);
@@ -59,15 +60,15 @@ public class MainServiceImpl implements MainService{
         } else if (START.equals(cmd)) {
             return "Доброго времени суток! Чтобы посмотреть список команд, введите /help";
         } else if (text.contains("/post")) {
-            return postjoke(update);
+            return postJoke(update);
         } else if (text.contains("/put")) {
-            return putjoke(update);
+            return putJoke(update);
         } else if (GETALL.equals(cmd)) {
-            return getall(update);
+            return getAll(update);
         } else if (text.contains("/get")) {
-            return getjoke(update);
+            return getJoke(update);
         } else if (text.contains("/delete")) {
-            return deletejoke(update);
+            return deleteJoke(update);
         }else if (text.contains("/popular")) {
             return getMostPopular(update);
         }else if (text.contains("/random")) {
@@ -79,10 +80,37 @@ public class MainServiceImpl implements MainService{
         }
     }
 
-    private String deletejoke(Update update) {
+    public String start(Update update){
+        var output = "Доброго времени суток! Чтобы посмотреть список команд, введите /help";
+        var chatId = update.getMessage().getChatId();
+        sendAnswer(output, chatId);
+        return output;
+    }
+    public String start(){
+        return "Доброго времени суток! Чтобы посмотреть список команд, введите /help";
+    }
+    public String deleteJoke(Update update) {
         try{
         String idjoke = update.getMessage().getText().substring(update.getMessage().getText().indexOf(" ") + 1);
         Optional <Joke> joke = jokeDAO.findById(Long.parseLong(idjoke));
+            if(joke.isPresent()) {
+                jokeDAO.delete(joke.get());
+                var output = "Шутка успешно удалена";
+                var chatId = update.getMessage().getChatId();
+                sendAnswer(output, chatId);
+                return output;
+            } else {
+                return "Шутка с указанным id не найдена";
+            }
+        }
+        catch (NumberFormatException e){
+            return "Произошла ошибка!\nУбедитесь, что написали в команде лишь 1 пробел";
+        }
+    }
+
+    public String deleteJoke(Long id) {
+        try{
+            Optional <Joke> joke = jokeDAO.findById(id);
             if(joke.isPresent()) {
                 jokeDAO.delete(joke.get());
                 return "Шутка успешно удалена";
@@ -95,7 +123,7 @@ public class MainServiceImpl implements MainService{
         }
     }
 
-    private String getjoke(Update update) {
+    public String getJoke(Update update) {
         try{
         String id = update.getMessage().getText().substring(update.getMessage().getText().indexOf(" ") + 1);
         Optional <Joke> joke = jokeDAO.findById(Long.parseLong(id));
@@ -113,8 +141,22 @@ public class MainServiceImpl implements MainService{
             return "Произошла ошибка!\nУбедитесь, что написали в команде лишь 1 пробел и что введённый id существует";
         }
     }
+    public ResponseEntity<Optional<Joke>> getJoke(Long id) {
+        try{
+            Optional <Joke> joke = jokeDAO.findById(id);
+            var changeDate = joke.get().getChangeDate();
+            var rating = joke.get().getRating() + 1;
+            Optional<Joke> jokeOptional = jokeDAO.findById(id);
+            if(jokeOptional.isPresent()) {
+                return ResponseEntity.ok(joke);
+            } else return (ResponseEntity<Optional<Joke>>) ResponseEntity.notFound();
+            }
+        catch (NumberFormatException e){
+            return (ResponseEntity<Optional<Joke>>) ResponseEntity.badRequest();
+        }
+    }
 
-    private String getall(Update update) {
+    public String getAll(Update update) {
         var chatId = update.getMessage().getChatId();
         List<Joke> jokes = jokeDAO.findAll();
         if (jokes.isEmpty()) {
@@ -130,7 +172,14 @@ public class MainServiceImpl implements MainService{
         return "\nВыведены все шутки";
     }
 
-    private String putjoke(Update update) {
+    public ResponseEntity<List<Joke>> getAll() {
+        List<Joke> jokes = jokeDAO.findAll();
+        if (jokes.isEmpty()) {
+            return (ResponseEntity<List<Joke>>) ResponseEntity.notFound();
+        }
+        return ResponseEntity.ok(jokes);
+    }
+    public String putJoke(Update update) {
         try {
             String[] data = update.getMessage().getText().split(" ");
             if(data.length < 3) {
@@ -156,14 +205,29 @@ public class MainServiceImpl implements MainService{
         }
     }
 
-    private String postjoke(Update update) {
+    public String putJoke(Long id, String newText) {
+            Optional<Joke> jokeOptional = jokeDAO.findById(id);
+            if(jokeOptional.isPresent()) {
+                Joke joke = jokeOptional.get();
+                joke.setText(newText);
+                joke.setChangeDate(LocalDate.now()+ " " + LocalTime.now().truncatedTo(ChronoUnit.SECONDS)
+                        .format(DateTimeFormatter.ISO_LOCAL_TIME));
+                jokeDAO.save(joke);
+
+                return "Шутка с id " + id + " успешно изменена";
+            } else {
+                return "Шутка с id " + id + " не найдена";
+            }
+    }
+
+    public String postJoke(Update update) {
         var text = update.getMessage().getText().substring(update.getMessage().getText().indexOf(" ") + 1);
         if (text.contains("/post")) return "Вы не ввели шутку!";
         return "Ваша шутка: " + text + "\nId шутки: " + saveJoke(text).toString() + "\nДата создания " + LocalDate.now() + " " + LocalTime.now().truncatedTo(ChronoUnit.SECONDS)
                 .format(DateTimeFormatter.ISO_LOCAL_TIME);
     }
 
-    private String getMostPopular(Update update){
+    public String getMostPopular(Update update){
         var chatId = update.getMessage().getChatId();
         List<Joke> jokes= jokeDAO.findAll();
         if (jokes.isEmpty()) {
@@ -208,7 +272,20 @@ public class MainServiceImpl implements MainService{
 
         return "\nТоп 5 самых популярных шуток выведены";
     }
+    public ResponseEntity<List<Joke>> getMostPopular(){
+        List<Joke> jokes= jokeDAO.findAll();
+        if (jokes.isEmpty()) {
+            return ResponseEntity.ok(jokes);
+        }
 
+        // Сортируем шутки по рейтингу в порядке убывания и берём первые 5 шуток
+        List<Joke> top5Jokes = jokes.stream()
+                .sorted(Comparator.comparing(Joke::getRating).reversed())
+                .limit(5)
+                .toList();
+
+        return ResponseEntity.ok(top5Jokes);
+    }
     private void saveAppUser(Update update, Long id) {
             var telegramUser = update.getMessage().getFrom();
             AppUser appUser= AppUser.builder()
@@ -221,7 +298,7 @@ public class MainServiceImpl implements MainService{
             appUserDAO.save(appUser);
     }
 
-    private String getRandom() {
+    public String getRandom() {
         List<Joke> jokes = jokeDAO.findAll();
         if (jokes.isEmpty()) {
             return "Нет доступных шуток";
@@ -246,7 +323,29 @@ public class MainServiceImpl implements MainService{
         }
     }
 
-    private String allRequests(Update update){
+    public ResponseEntity<Joke> getRandomJoke() {
+        List<Joke> jokes = jokeDAO.findAll();
+        if (jokes.isEmpty()) {
+            return (ResponseEntity<Joke>) ResponseEntity.notFound();
+        }
+        try{
+            Random random = new Random();
+            Joke randomJoke = jokes.get(random.nextInt(jokes.size()));
+            var changeDate = randomJoke.getChangeDate();
+            var rating = randomJoke.getRating() + 1;
+            Optional<Joke> jokeOptional = jokeDAO.findById(randomJoke.getId());
+            if(jokeOptional.isPresent()) {
+                Joke joke = jokeOptional.get();
+                joke.setRating(rating);
+                jokeDAO.save(joke);}
+                return ResponseEntity.ok(randomJoke);
+            }
+        catch (Exception e){
+            return (ResponseEntity<Joke>) ResponseEntity.internalServerError();
+        }
+    }
+
+    public String allRequests(Update update){
         var chatId = update.getMessage().getChatId();
         List<AppUser> appUsers = appUserDAO.findAll();
         if (appUsers.isEmpty()) {
@@ -257,7 +356,15 @@ public class MainServiceImpl implements MainService{
         }
         return "\nВыведены все вызовы";
     }
-    private String help() {
+
+    public ResponseEntity<List<AppUser>> allRequests(){
+        List<AppUser> appUsers = appUserDAO.findAll();
+        for (AppUser appUser : appUsers){
+            appUsers.add(appUser);
+        }
+        return ResponseEntity.ok(appUsers);
+    }
+    public String help() {
         return "Список доступных команд:\n"
                 + "/post <шутка> - добавить шутку\n"
                 + "/get <id шутки> - вывести шутку по id\n"
@@ -266,10 +373,11 @@ public class MainServiceImpl implements MainService{
                 + "/delete <id шутки> - удалить шутку\n"
                 + "/popular - вывести топ 5 популярных шуток\n"
                 + "/random - вывести случайную шутку\n"
-                + "/allRequests - вывести все совершенные запросы";
+                + "/allRequests - вывести все совершённые запросы\n"
+                + "/registration - регистрация пользователя";
     }
 
-    private Long saveJoke(String text){
+    public Long saveJoke(String text){
         Joke joke = Joke.builder()
                 .text(text)
                 .creationDate(LocalDate.now() + " " + LocalTime.now().truncatedTo(ChronoUnit.SECONDS)
