@@ -25,7 +25,7 @@ public class RestController {
         String response = "Шутка сохранена";
         return ResponseEntity.ok(response);
     }
-
+//
     @DeleteMapping("/delete")
     public ResponseEntity<String> deleteJoke(@RequestParam Long id) {
         String response = mainServiceImpl.deleteJoke(id);
