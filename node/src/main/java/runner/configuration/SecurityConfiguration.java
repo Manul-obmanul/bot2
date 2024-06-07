@@ -21,11 +21,10 @@ public class SecurityConfiguration{
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.authorizeHttpRequests(expressionInterceptUrlRegistry ->
                         expressionInterceptUrlRegistry
-                                .requestMatchers("/registration", "/login").permitAll()
-                                .requestMatchers(HttpMethod.POST, "/orders").hasAuthority(UserAuthority.PLACE_ORDERS.getAuthority())
-                                .requestMatchers(HttpMethod.GET, "/orders/**").hasAuthority(UserAuthority.MANAGE_ORDERS.getAuthority())
-                                .requestMatchers(HttpMethod.POST, "/items").hasAuthority(UserAuthority.MANAGE_ORDERS.getAuthority())
-                                .anyRequest().hasAuthority(UserAuthority.FULL.getAuthority()))
+                                .requestMatchers("/registration", "/user/login").permitAll()
+                                .requestMatchers(HttpMethod.GET, "/jokes").hasAuthority(UserAuthority.USER.getAuthority())
+                                .requestMatchers( "/jokes/**").hasAuthority(UserAuthority.MODERATOR.getAuthority())
+                                .anyRequest().hasAuthority(UserAuthority.ADMIN.getAuthority()))
                 .formLogin(Customizer.withDefaults())
                 .csrf(AbstractHttpConfigurer::disable);
 

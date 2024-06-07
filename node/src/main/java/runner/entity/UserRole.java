@@ -15,7 +15,7 @@ public class UserRole {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE)
     private Long id;
-
+    @ManyToOne
     @JsonIgnore
     @JoinColumn(name = "user_id")
     private User user;

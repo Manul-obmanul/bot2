@@ -7,5 +7,5 @@ import runner.entity.UserRole;
 import java.util.Optional;
 
 public interface UserRolesRepository extends CrudRepository<UserRole, Long> {
-
+    public UserRole findByUserId(Long id);
 }
