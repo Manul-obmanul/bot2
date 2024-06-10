@@ -15,4 +15,6 @@ public interface JokeDAO extends PagingAndSortingRepository<Joke, Long> {
     void save(Joke joke1);
 
     List<Joke> findAll();
+
+    List<Joke> findByCustomQuery(String query);
 };

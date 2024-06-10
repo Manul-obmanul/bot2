@@ -1,14 +1,19 @@
 package runner.service.impl;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Query;
 import lombok.extern.log4j.Log4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import runner.dao.AppUserDAO;
 import runner.dao.JokeDAO;
-import runner.entity.AppUser;
-import runner.entity.Joke;
+import runner.dao.UserRepository;
+import runner.entity.*;
 import runner.service.MainService;
 import runner.service.ProducerService;
 
@@ -25,24 +30,31 @@ import static runner.service.enums.ServiceCommands.*;
 @Service
 @Log4j
 public class MainServiceImpl implements MainService{
+    private final UserRepository userRepository;
     private final ProducerService producerService;
     private final JokeDAO jokeDAO;
     private final AppUserDAO appUserDAO;
+    private UserServiceImpl userService;
+    private PasswordEncoder encoder;
+    @Autowired
+    private EntityManager entityManager;
 
-    public MainServiceImpl(ProducerService producerService, JokeDAO jokeDAO, AppUserDAO appUserDAO) {
+    public MainServiceImpl(ProducerService producerService, JokeDAO jokeDAO, AppUserDAO appUserDAO,
+                           UserRepository userRepository) {
         this.producerService = producerService;
         this.jokeDAO = jokeDAO;
         this.appUserDAO = appUserDAO;
+        this.userRepository = userRepository;
     }
 
     @Override
     public void proccessTextMessage(Update update){
-        /*var text = update.getMessage().getText();
+        var text = update.getMessage().getText();
         var output = "Что-то пошло не так...";
         output = processServiceCommand(update, text);
 
         var chatId = update.getMessage().getChatId();
-        sendAnswer(output, chatId);*/
+        sendAnswer(output, chatId);
     }
 
     public void sendAnswer(String output, Long chatId) {
@@ -75,16 +87,70 @@ public class MainServiceImpl implements MainService{
             return getRandom();
         }else if (text.contains("/allRequests")) {
             return allRequests(update);
-        } else {
+        } else if (text.contains("/registration")) {
+            return registration(update);
+        }else if (text.contains("/login")) {
+            return login(update);
+        }else if (text.contains("/updateuser")) {
+            return updateUser(update);
+        }else if (text.contains("/deleteuser")) {
+            return deleteUser(update);
+        }else {
             return "Неизвестная команда! Чтобы посмотреть список доступных команд, введите /help";
         }
     }
-
-    public String start(Update update){
-        var output = "Доброго времени суток! Чтобы посмотреть список команд, введите /help";
-        var chatId = update.getMessage().getChatId();
-        sendAnswer(output, chatId);
-        return output;
+    public String registration(Update update){
+        var text = update.getMessage().getText().substring(update.getMessage().getText().indexOf(" ") + 1);
+        if (text.contains("/registration")) return "Вы не ввели username и password!";
+        String[] parts = text.split(" ");
+        var username = parts[0];
+        var password = parts[1];
+        userService.registration(username, password);
+        return "Регистрация успешна";
+    }
+    public String login(Update update){
+        var text = update.getMessage().getText().substring(update.getMessage().getText().indexOf(" ") + 1);
+        if (text.contains("/login")) return "Вы не ввели username и password!";
+        String[] parts = text.split(" ");
+        var username = parts[0];
+        var password = parts[1];
+        try{userService.loadUserByUsername(username);
+            Optional<User> user = userRepository.findByUsername(username);
+            if (user.get().getPassword().equals(password)) return "Вход успешен";
+            else return "Неверный пароль";}
+        catch (UsernameNotFoundException e){
+            return "Пользователь с таким username не найден";
+        }
+    }
+    public String deleteUser(Update update){
+        var username = update.getMessage().getText().substring(update.getMessage().getText().indexOf(" ") + 1);
+        if (username.contains("/delete")) return "Вы не ввели username!";
+        Optional<User> user = userRepository.findByUsername(username);
+        if(user.isPresent()) {
+            userRepository.deleteById(userRepository.findByUsername(username).get().getId());
+            return "Пользователь успешно удалён";
+        } else return "Убедитесь, что Вы  вводите верный username";
+    }
+    public String updateUser(Update update){
+        try{
+        var text = update.getMessage().getText().substring(update.getMessage().getText().indexOf(" ") + 1);
+        if (text.contains("/delete")) return "Вы не ввели username!";
+        String[] parts = text.split(" ");
+        var username = parts[0];
+        var password = parts[1];
+        boolean enabled = Boolean.parseBoolean(parts[2]);
+        boolean expired = Boolean.parseBoolean(parts[3]);
+        boolean locked = Boolean.parseBoolean(parts[4]);
+        Optional<User> user = userRepository.findByUsername(username);
+        user.get().setUsername(username);
+        user.get().setPassword(encoder.encode(password));
+        user.get().setEnabled(enabled);
+        user.get().setExpired(expired);
+        user.get().setLocked(locked);
+        return "Пользователь успешно изменён";}
+        catch (Exception e){
+            return "Убедитесь , что пытаетесь изменить существующего пользователя и вводите новые данные в правильном парядке";
+        }
     }
     public String start(){
         return "Доброго времени суток! Чтобы посмотреть список команд, введите /help";
@@ -233,12 +299,16 @@ public class MainServiceImpl implements MainService{
         if (jokes.isEmpty()) {
             return "Нет доступных шуток";
         }
+        String query = "SELECT * FROM jokes ORDER BY rating DESC LIMIT 5";
+        List<Joke> top5Jokes = jokeDAO.findByCustomQuery(query);
+        if (top5Jokes.isEmpty()) {
+            return "Нет доступных шуток";
+        }
 
-        // Сортируем шутки по рейтингу в порядке убывания и берём первые 5 шуток
-        List<Joke> top5Jokes = jokes.stream()
-                .sorted(Comparator.comparing(Joke::getRating).reversed())
-                .limit(5)
-                .toList();
+//        List<Joke> top5Jokes = jokes.stream()
+//                .sorted(Comparator.comparing(Joke::getRating).reversed())
+//                .limit(5)
+//                .toList();
 
         StringBuilder response = new StringBuilder("Топ 5 самых популярных шуток:\n");
         for (Joke joke : top5Jokes) {
@@ -278,13 +348,15 @@ public class MainServiceImpl implements MainService{
             return ResponseEntity.ok(jokes);
         }
 
-        // Сортируем шутки по рейтингу в порядке убывания и берём первые 5 шуток
-        List<Joke> top5Jokes = jokes.stream()
-                .sorted(Comparator.comparing(Joke::getRating).reversed())
-                .limit(5)
-                .toList();
+        String query = "SELECT * FROM jokes ORDER BY rating DESC LIMIT 5";
+        List<Joke> top5Jokes = jokeDAO.findByCustomQuery(query);
 
-        return ResponseEntity.ok(top5Jokes);
+//        List<Joke> top5Jokes = jokes.stream()
+//                .sorted(Comparator.comparing(Joke::getRating).reversed())
+//                .limit(5)
+//                .toList();
+
+        return ResponseEntity.ofNullable(top5Jokes);
     }
     private void saveAppUser(Update update, Long id) {
             var telegramUser = update.getMessage().getFrom();
@@ -303,11 +375,10 @@ public class MainServiceImpl implements MainService{
         if (jokes.isEmpty()) {
             return "Нет доступных шуток";
         }
-        try{
-        Random random = new Random();
-        Joke randomJoke = jokes.get(random.nextInt(jokes.size()));
-        var changeDate = randomJoke.getChangeDate();
-        var rating = randomJoke.getRating() + 1;
+            Query query = entityManager.createNativeQuery("SELECT * FROM Joke ORDER BY RAND() LIMIT 1", Joke.class);
+            Joke randomJoke = (Joke) query.getSingleResult();
+            var changeDate = randomJoke.getChangeDate();
+            var rating = randomJoke.getRating() + 1;
             Optional<Joke> jokeOptional = jokeDAO.findById(randomJoke.getId());
             if(jokeOptional.isPresent()) {
                 Joke joke = jokeOptional.get();
@@ -317,9 +388,6 @@ public class MainServiceImpl implements MainService{
             return randomJoke.getText() + "\nДата создания " + randomJoke.getCreationDate() + "\nДата изменения ---" + "\nКоличество вызовов: " + rating;
         } else {
             return randomJoke.getText() + "\nДата создания " + randomJoke.getCreationDate() + "\nДата изменения " + randomJoke.getChangeDate() + "\nКоличество вызовов: " + rating;
-        }}
-        catch (Exception e){
-            return "Произошла ошибка! Скорее всего была удалена одна или несколько шуток, из-за чего случайно выбранное удаленное id не было найдено...";
         }
     }
 
@@ -328,9 +396,8 @@ public class MainServiceImpl implements MainService{
         if (jokes.isEmpty()) {
             return (ResponseEntity<Joke>) ResponseEntity.notFound();
         }
-        try{
-            Random random = new Random();
-            Joke randomJoke = jokes.get(random.nextInt(jokes.size()));
+            Query query = entityManager.createNativeQuery("SELECT * FROM Joke ORDER BY RAND() LIMIT 1", Joke.class);
+            Joke randomJoke = (Joke) query.getSingleResult();
             var changeDate = randomJoke.getChangeDate();
             var rating = randomJoke.getRating() + 1;
             Optional<Joke> jokeOptional = jokeDAO.findById(randomJoke.getId());
@@ -339,10 +406,7 @@ public class MainServiceImpl implements MainService{
                 joke.setRating(rating);
                 jokeDAO.save(joke);}
                 return ResponseEntity.ok(randomJoke);
-            }
-        catch (Exception e){
-            return (ResponseEntity<Joke>) ResponseEntity.internalServerError();
-        }
+
     }
 
     public String allRequests(Update update){

@@ -1,5 +1,6 @@
 package runner.service.impl;
 
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -23,6 +24,7 @@ public class UserServiceImpl implements UserService, UserDetailsService {
     private final UserRolesRepository userRolesRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    @Transactional
     @Override
     public void registration(String username, String password) {
         if (userRepository.findByUsername(username).isEmpty()) {
